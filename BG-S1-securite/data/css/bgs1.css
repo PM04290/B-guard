@@ -1,0 +1,22 @@
+div.cell {
+  text-align: center;
+  display: grid;
+}
+div.cell > header {
+    background-color: #EEE;
+    border-top-left-radius: var(--border-radius);
+    border-top-right-radius: var(--border-radius);
+    border-top: var(--form-element-border-color) var(--border-width) solid;
+    border-left: var(--form-element-border-color) var(--border-width) solid;
+    border-right: var(--form-element-border-color) var(--border-width) solid;
+}
+div.cell > footer {
+    border-bottom-left-radius: var(--border-radius);
+    border-bottom-right-radius: var(--border-radius);
+    border-bottom: var(--form-element-border-color) var(--border-width) solid;
+    border-left: var(--form-element-border-color) var(--border-width) solid;
+    border-right: var(--form-element-border-color) var(--border-width) solid;
+}
+div.cell > footer > input[type="number"] {
+	border: none;
+}
