@@ -75,9 +75,9 @@ const char html_child_line[] PROGMEM = R"rawliteral(
 )rawliteral";
 
 const char html_monitor_dev[] PROGMEM = R"rawliteral(
-<article id="mon_#D#_data">
+<article id="mon_data_#D#">
   <header>%CNFNAME% #D#</header>
-  <div class="row" id="mon_#D#_entity">
+  <div class="row" id="mon_entity_#D#">
   </div>
 </article>
 )rawliteral";

@@ -281,7 +281,7 @@ void sendMonitorChilds()
       uint8_t id = ent->getId();
       docJson.clear();
       docJson["cmd"] = "monitornotifychild";
-      docJson["mon_" + String(address) + "_entity"] = getHTML_ChildMonitor(address, id);
+      docJson["mon_entity_" + String(address)] = getHTML_ChildMonitor(address, id);
       String js;
       serializeJson(docJson, js);
       ws.textAll(js);
@@ -291,13 +291,19 @@ void sendMonitorChilds()
 
 void sendLocalData()
 {
+  String js = "";
   docJson.clear();
   docJson["cmd"] = "value";
   docJson["#vbat"] = vbat->getFloat();
   docJson["#sin1"] = BinAlarm1->getValue() > 0 ? "alarme" : "normal";
   docJson["#sin2"] = BinAlarm2->getValue() > 0 ? "alarme" : "normal";
   docJson["#lumi"] = Lumi->getFloat();
-  String js = "";
+  serializeJson(docJson, js);
+  ws.textAll(js);
+  //
+  docJson.clear();
+  docJson["cmd"] = "checked";
+  docJson["#out1"] = RelayOut1->getBool();
   serializeJson(docJson, js);
   ws.textAll(js);
 
@@ -324,7 +330,7 @@ void notifyDeviceMonitor(uint8_t d)
   {
     docJson.clear();
     docJson["cmd"] = "monitornotify";
-    docJson["mon_" + String(d) + "_data"] = getHTML_DeviceForm(d);
+    docJson["mon_data_" + String(d)] = getHTML_DeviceMonitor(d);
     String js = "";
     serializeJson(docJson, js);
     ws.textAll(js);
@@ -337,7 +343,7 @@ void notifyChildMonitor(uint8_t d, uint8_t c)
   {
     docJson.clear();
     docJson["cmd"] = "monitornotifychild";
-    docJson["mon_" + String(d) + "_entity" ] = getHTMLforChildLine(d, c);
+    docJson["mon_entity_" + String(d) ] = getHTML_ChildMonitor(d, c);
     String js = "";
     serializeJson(docJson, js);
     ws.textAll(js);
@@ -485,6 +491,20 @@ void handleWsMessage(void *arg, uint8_t *data, size_t len)
     {
       RelayOut1->setBool(p1 == "1");
     }
+    if (cmd == "deldev")
+    {
+      Router.delDevice(p1.toInt());
+      docJson.clear();
+      docJson["cmd"] = "remove";
+      docJson["#form_"] = p1;
+      serializeJson(docJson, js);
+      ws.textAll(js);
+      docJson.clear();
+      docJson["cmd"] = "remove";
+      docJson["#mon_data_"] = p1;
+      serializeJson(docJson, js);
+      ws.textAll(js);
+    }
     if (cmd == "pairing")
     {
       pairToHubPending = true;
@@ -510,6 +530,12 @@ void handleWsMessage(void *arg, uint8_t *data, size_t len)
         serializeJson(docJson, js);
         ws.textAll(js);
         //
+        docJson.clear();
+        docJson["cmd"] = "remove";
+        docJson["#mon_data_"] = String(oldAdr);
+        serializeJson(docJson, js);
+        ws.textAll(js);
+        //
         dev->setAddress(oldAdr, newAdr);
         //
         notifyDeviceForm(newAdr);
@@ -525,6 +551,18 @@ void handleWsMessage(void *arg, uint8_t *data, size_t len)
           serializeJson(docJson, js);
           ws.textAll(js);
         }
+        notifyDeviceMonitor(newAdr);
+        ent = nullptr;
+        while ((ent = dev->walkEntity(ent)))
+        {
+          uint8_t id = ent->getId();
+          docJson.clear();
+          docJson["cmd"] = "monitornotifychild";
+          docJson["mon_entity_" + String(newAdr)] = getHTML_ChildMonitor(newAdr, id);
+          String js;
+          serializeJson(docJson, js);
+          ws.textAll(js);
+        }
       }
     }
     if (cmd == "endpairing")
@@ -534,6 +572,18 @@ void handleWsMessage(void *arg, uint8_t *data, size_t len)
       if (Router.endPairing(address))
       {
         notifyDevicePairing(address);
+        //
+        notifyDeviceMonitor(address);
+        CDevice* dev = Router.getDeviceByAddress(address);
+        if (dev)
+        {
+          CEntity* ent = nullptr;
+          while ((ent = dev->walkEntity(ent)))
+          {
+            uint8_t id = ent->getId();
+            notifyChildMonitor(address, id);
+          }
+        }
       }
     }
     if (cmd == "btnmon")

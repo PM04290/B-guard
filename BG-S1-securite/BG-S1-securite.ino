@@ -1,6 +1,6 @@
 /*
-  Designed for ESP32 wroom
-  Radio module : SX1278 (Ra-01 / Ra-02)
+  Designed for ESP32 S3 Mini
+  Radio module : SX1278 (Ra-02)
 
   Wifi AP
     - default ssid : bgsecure0
@@ -18,9 +18,9 @@
 
 // needed for ArduinoJson library
 #define ARDUINOJSON_ENABLE_NAN 1
-#include <ArduinoJson.h>         // available in library manager
-#include <ESPAsyncWebServer.h>   // https://github.com/me-no-dev/ESPAsyncWebServer (don't get fork in library manager)
-                                 // https://github.com/me-no-dev/AsyncTCP
+#include <ArduinoJson.h>          // available in library manager
+#include <ESPAsyncWebServer.h>    // https://github.com/me-no-dev/ESPAsyncWebServer (don't get fork in library manager)
+                                  // and https://github.com/me-no-dev/AsyncTCP
 #include "config.h"
 
 #define ML_SX1278
@@ -41,6 +41,7 @@ Relay* RelayOut1;  // Relay
 Regul* RegOut1;    // Relay regulation
 Input* LumMin;     // Luminosity mini
 
+#include "lumcycle.hpp"
 #include "webserver.hpp"
 
 #ifdef DEBUG_LED
@@ -78,7 +79,8 @@ volatile byte idxWriteTable = 0;
 hw_timer_t* secTimer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 volatile bool topSecond = false;
-
+uint8_t cntMinute = 0;
+uint8_t cntHour = 0;
 
 void IRAM_ATTR onTimer()
 {
@@ -323,6 +325,9 @@ void setup()
       LED_RED(255); delay(300); LED_OFF; delay(200);
     }
   }
+  analogReadResolution(12);  // 12 bits (0-4095)
+  analogSetAttenuation(ADC_11db);  // 0-3.3V
+  cycleInit();
 
   vbat = (Analog*)deviceManager.addElement(new Analog(PIN_MES_VBAT, CHILD_ID_VBAT, F("Vbat"), F("V"), 0.1, 10));
   vbat->setParams(onAnalogVbat, 0, 0, 0);
@@ -361,7 +366,9 @@ void setup()
 void loop()
 {
   static uint32_t ntick = 0;
-  bool do24Hour = false;
+  bool doMinute = false;
+  bool doHour = false;
+  bool doDay = false;
   ws.cleanupClients();
   if (topSecond)
   {
@@ -370,13 +377,20 @@ void loop()
     portEXIT_CRITICAL(&timerMux);
     //
     ntick++;
-    if (ntick >= 86400) { // 1 day
+    if (ntick >= 60) { // 1 minute
       ntick = 0;
-      do24Hour = true;
+      cntMinute++;
+      doMinute = true;
     }
-  }
-  if (do24Hour) {
-    do24Hour = false;
+    if (cntMinute >= 60) { // 1 Hour
+      cntMinute = 0;
+      cntHour++;
+      doHour = true;
+    }
+    if (cntHour >= 24) { // 1 day
+      cntHour = 0;
+      doDay = true;
+    }
   }
   if (pairToHubPending)
   { // wait for receive acknowledge from HUB (see "onReceive")
@@ -386,4 +400,16 @@ void loop()
   processLoRa();
   deviceManager.processElements();
   deviceManager.sendElements();
+  //
+  if (doMinute) {
+    doMinute = false;
+    traiter_nouvelle_minute();
+  }
+  if (doHour) {
+    doHour = false;
+  }
+  if (doDay) {
+    doDay = false;
+    mesures_faites_aujourd_hui = 0;  // Reset journalier
+  }
 }

@@ -84,6 +84,8 @@ bool LoraOK = false;
 bool needPairing = false;
 bool pairingPending = false;
 uint32_t needSynchro = 0;
+bool needTare = false;
+bool needCalibration = false;
 
 // RadioLink IDs
 #define CHILD_ID_VBAT        1
@@ -208,7 +210,7 @@ void setup()
     EEPROM.put(EEP_UID, uid);
     EEPROM.put(EEP_HUBID, hubid);
     inputRecord ir;
-    ir = { 10, 500, 150, 10};            // min:0 max:5000 sel:100 lux div:1
+    ir = { 10, 500, 150, 10};  // min:10 max:500 sel:100 lux div:10
     EEPROM.put(EEP_WREF, ir);
     EEPROM.put(EEP_TARE, scaleTare);
     EEPROM.put(EEP_CALIB, scaleCalibration);
@@ -327,6 +329,8 @@ void setup()
   LED_OFF;
   DEBUGln(F("Setup done"));
   sleepCounter = 0x1FFF;
+  needTare = false;
+  needCalibration = false;
 }
 
 void loop()
@@ -336,10 +340,38 @@ void loop()
   {
     isSynchro = true;
   }
+  if (needTare)
+  {
+    LED_ON;
+    BGR2_scale.powerUp();
+    BGR2_scale.calculateZeroOffset();
+    scaleTare = BGR2_scale.getZeroOffset();
+    EEPROM.put(EEP_TARE, scaleTare);
+    DEBUGln(scaleTare);
+    BGR2_scale.powerDown();
+    LED_OFF;
+    DEBUGln("Tare done");
+    //
+    needTare = false;
+  }
+  if (needCalibration)
+  {
+    LED_ON;
+    BGR2_scale.powerUp();
+    BGR2_scale.calculateCalibrationFactor(ScaleWeightRef->getFloat());
+    scaleCalibration = BGR2_scale.getCalibrationFactor();
+    EEPROM.put(EEP_CALIB, scaleCalibration);
+    DEBUGln(scaleCalibration);
+    BGR2_scale.powerDown();
+    LED_OFF;
+    DEBUGln("Calibration done");
+    //
+    needCalibration = false;
+  }
 #ifdef ML_MAX485_PIN_DE
   RLhelper.process();
 #endif
-  
+
   if (LoraOK && ((sleepCounter >= 10) || isSynchro))
   {
     sleepCounter = 0;
@@ -418,7 +450,7 @@ void onReceive(uint8_t len, rl_packet_t* pIn)
   {
     if ((pIn->senderID == hubid) && (pIn->childID == RL_ID_SYNCHRO))
     {
-      needSynchro = (millis() + 1000 + (uid*30)) | 1; // TODO régler la tempo
+      needSynchro = (millis() + 1000 + (uid * 30)) | 1; // TODO régler la tempo
       return;
     }
     return;
@@ -455,21 +487,14 @@ void onReceive(uint8_t len, rl_packet_t* pIn)
     }
     if (ScaleTare && (pIn->childID == CHILD_ID_SCALE_TARE))
     {
-      LED_ON;
-      BGR2_scale.calculateZeroOffset();
-      scaleTare = BGR2_scale.getZeroOffset();
-      EEPROM.put(EEP_TARE, scaleTare);
-      LED_OFF;
+      needTare = true;
+      DEBUGln("Set tare");
       return;
     }
     if (ScaleWeightRef && pIn->childID == CHILD_ID_SCALE_CALIB)
     {
-      LED_ON;
-      BGR2_scale.calculateCalibrationFactor(ScaleWeightRef->getFloat());
-      scaleCalibration = BGR2_scale.getCalibrationFactor();
-      DEBUGln(scaleCalibration);
-      EEPROM.put(EEP_CALIB, scaleCalibration);
-      LED_OFF;
+      needCalibration = true;
+      DEBUGln("Set calibration");
       return;
     }
   }

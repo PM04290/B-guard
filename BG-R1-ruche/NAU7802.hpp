@@ -239,7 +239,7 @@ class NAU7802 {
       uint8_t samplesAquired = 0;
 
       unsigned long startTime = millis();
-      while (1)
+      while (millis() - startTime < timeout_ms)
       {
         if (available() == true)
         {
@@ -247,12 +247,9 @@ class NAU7802 {
           if (++samplesAquired == averageAmount)
             break; //All done
         }
-        if (millis() - startTime > timeout_ms)
-          return (0); //Timeout - Bail with error
         delay(1);
       }
       total /= averageAmount;
-
       return (total);
     };
 

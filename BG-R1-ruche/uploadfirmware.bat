@@ -1,5 +1,47 @@
 @echo off
 setlocal enabledelayedexpansion
+
+setlocal
+
+rem --- Vérifie si pymcuprog est déjà installé ---
+pymcuprog --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [INFO] pymcuprog non detecte. Tentative d'installation...
+
+    rem --- Vérifie que Python est disponible ---
+    where python >nul 2>&1
+    if %errorlevel% neq 0 (
+        echo [ERREUR] Python n'est pas installe ou non accessible.
+        echo Installez Python depuis https://www.python.org/downloads/
+        pause
+        exit /b 1
+    )
+
+    rem --- Vérifie que pip est disponible ---
+    python -m pip --version >nul 2>&1
+    if %errorlevel% neq 0 (
+        echo [ERREUR] pip n'est pas installe.
+        echo Essayez : python -m ensurepip
+        pause
+        exit /b 1
+    )
+
+    rem --- Installe pymcuprog ---
+    python -m pip install --upgrade pip >nul
+    python -m pip install pymcuprog
+
+    rem --- Vérifie si installation OK ---
+    pymcuprog --version >nul 2>&1
+    if %errorlevel% neq 0 (
+        echo [ERREUR] L'installation de pymcuprog a echoue.
+        pause
+        exit /b 1
+    )
+
+    echo [OK] pymcuprog installe avec succes.
+)
+
+
 echo Liste des ports COM disponibles :
 :: reg query HKLM\HARDWARE\DEVICEMAP\SERIALCOMM
 :: set /p usedcom=Téléversement via port COM

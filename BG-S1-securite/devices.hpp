@@ -2,6 +2,7 @@ void notifyDeviceForm(uint8_t);
 void notifyDeviceHeader(uint8_t);
 void notifyDevicePairing(uint8_t);
 void notifyChildLine(uint8_t, uint8_t);
+void notifyDeviceMonitor(uint8_t);
 void notifyState( uint8_t, uint8_t, String );
 
 enum EntityCategory {
@@ -510,7 +511,6 @@ class CRouter {
             DEBUGf("Added Device %d %s\n", cp->senderID, cnfb->name);
             dev->setPairing(true);
             notifyDeviceForm(cp->senderID);
-            // TODO monitor
           } else
           {
             DEBUGf("** Error adding new Device %d\n", cp->senderID);

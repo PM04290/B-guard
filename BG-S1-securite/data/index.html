@@ -15,10 +15,10 @@
     <main class="container">
 		<div class="headings">
 			<img src="i/logo-64.png" style="float:right">
-			<h2>B-GUARD Secure</h2>
+			<h2 style="padding-top: 20px;">B-GUARD Secure</h2>
 		</div>
 		<details open="">
-			<summary role="button">Moniteur</summary>
+			<summary role="button">Monitor</summary>
 			<article>
 				<header>BG-S1 secure</header>
 				<div class="row">
@@ -31,12 +31,16 @@
 						<footer><b id="sin1">?</b></footer>
 					</div>
 					<div class="col-2 cell">
-						<header>Alarme</header>
+						<header>Alarm</header>
 						<footer><b id="sin2">?</b></footer>
 					</div>
 					<div class="col-2 cell">
-						<header>Lumière</header>
+						<header>Luminosity</header>
 						<footer><b id="lumi">?</b></footer>
+					</div>
+					<div class="col-2 cell">
+						<header>Relay</header>
+						<footer><input type="checkbox" id="out1" role="switch" onclick="changeOut1(this)"></footer>
 					</div>
 				</div>
 			</article>

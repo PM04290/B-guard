@@ -1,6 +1,6 @@
 #pragma once
 
-#define VERSION "1.0"
+#define VERSION "1.1"
 
 #define DEBUG_SERIAL
 #define DSerial Serial
@@ -42,8 +42,8 @@
 #define EEPROM_TEXT_OFFSET  16
 #define EEPROM_TEXT_SIZE    48
 
-char Wifi_ssid[EEPROM_TEXT_SIZE+1] = "Freebox-8B7BFF";  // WiFi SSID
-char Wifi_pass[EEPROM_TEXT_SIZE+1] = "laclewpadeJOJO04290";  // WiFi password
+char Wifi_ssid[EEPROM_TEXT_SIZE+1] = "";  // WiFi SSID
+char Wifi_pass[EEPROM_TEXT_SIZE+1] = "";  // WiFi password
 
 char AP_ssid[10] = "bgsecure0";  // AP WiFi SSID
 char AP_pass[9] = "12345678";  // AP WiFi password

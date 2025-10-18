@@ -88,6 +88,11 @@ function WSonMessage(event) {
 			if (cmd === "replace") {
 				$(key).replaceWith( value );
 			} else
+			if (cmd === "remove") {
+				$(key+value).remove();
+				$("#toast").fadeTo(100, 1);
+				window.setTimeout(function() {$("#toast").fadeTo(500, 0)}, 2000);
+			} else
 			if (cmd === "value") {
 				const $obj = $(key);
 				if ($obj[0].nodeName === 'INPUT') {
@@ -155,6 +160,11 @@ function pairingActive(elt) {
 	websocket.send("pairingactive;"+(elt.checked?"1":"0"));
 }
 
+function deldev(elt, adr) {
+	if (confirm("Would you like to delete the Device ?") == true) {
+		websocket.send("deldev;"+adr);
+	}
+}
 function changeAdr(oldadr) {
 	let newadr = $("input[id='newadr_"+oldadr+"']").val();
 	if (newadr === "") {
