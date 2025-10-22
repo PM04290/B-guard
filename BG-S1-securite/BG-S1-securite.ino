@@ -20,13 +20,10 @@
 #define ARDUINOJSON_ENABLE_NAN 1
 #include <ArduinoJson.h>          // available in library manager
 #include <ESPAsyncWebServer.h>    // https://github.com/me-no-dev/ESPAsyncWebServer (don't get fork in library manager)
-                                  // and https://github.com/me-no-dev/AsyncTCP
+// and https://github.com/me-no-dev/AsyncTCP
 #include "config.h"
 
 #define ML_SX1278
-//#define ML_MAX485_PIN_RX PIN_485RX
-//#define ML_MAX485_PIN_TX PIN_485TX
-//#define ML_MAX485_PIN_DE PIN_485DE
 #include <MLiotComm.h>           // GitHub project : https://github.com/PM04290/MLiotComm
 #include <MLiotElements.h>       // GitHub project : https://github.com/PM04290/MLiotElements
 
@@ -41,7 +38,6 @@ Relay* RelayOut1;  // Relay
 Regul* RegOut1;    // Relay regulation
 Input* LumMin;     // Luminosity mini
 
-#include "lumcycle.hpp"
 #include "webserver.hpp"
 
 #ifdef DEBUG_LED
@@ -81,6 +77,9 @@ portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 volatile bool topSecond = false;
 uint8_t cntMinute = 0;
 uint8_t cntHour = 0;
+
+//
+bool onBoot = true;
 
 void IRAM_ATTR onTimer()
 {
@@ -217,10 +216,9 @@ void processLoRa()
 
 void setup()
 {
-  Serial1.begin(115200, SERIAL_8N1, PIN_485RX, PIN_485TX);
-  DEBUGinit();
   LED_INIT;
   LED_WHITE(64);
+  DEBUGinit();
   //
   pinMode(PIN_OUT1, OUTPUT);
   digitalWrite(PIN_OUT1, LOW);
@@ -299,7 +297,6 @@ void setup()
   }
 
   loraOK = MLiotComm.begin(RadioFreq * 1E6, onLoRaReceive, NULL, 20, RadioRange);
-  //loraOK = MLiotComm.begin(115200, onLoRaReceive, NULL);
   if (loraOK)
   {
     DEBUGf("LoRa ok at %dMHz (range %d)\n", RadioFreq, RadioRange);
@@ -327,16 +324,19 @@ void setup()
   }
   analogReadResolution(12);  // 12 bits (0-4095)
   analogSetAttenuation(ADC_11db);  // 0-3.3V
-  cycleInit();
 
   vbat = (Analog*)deviceManager.addElement(new Analog(PIN_MES_VBAT, CHILD_ID_VBAT, F("Vbat"), F("V"), 0.1, 10));
   vbat->setParams(onAnalogVbat, 0, 0, 0);
+  vbat->onChange(notifyVBat);
 
   BinAlarm1 = (Binary*)deviceManager.addElement(new Binary(PIN_IN1, CHILD_ID_BINSENSOR_1, F("Alarm1"), stateNormal, nullptr));
+  BinAlarm1->onChange(notifyAlarm1);
   BinAlarm2 = (Binary*)deviceManager.addElement(new Binary(PIN_IN2, CHILD_ID_BINSENSOR_2, F("Alarm2"), stateNormal, nullptr));
+  BinAlarm2->onChange(notifyAlarm2);
 
   Lumi = (Analog*)deviceManager.addElement(new Analog(PIN_IN3, CHILD_ID_SENSOR_LUM, F("Lumi"), F("Lux"), 5, 1));
   Lumi->setParams(onAnalogLumi, 10000, 0, 0); // 10K resistor (vcc side)
+  Lumi->onChange(notifyLumi);
 
   RelayOut1 = (Relay*)deviceManager.addElement(new Relay(PIN_OUT1, CHILD_ID_RELAY, F("Relay")));
   RelayOut1->onChange(notifyRelay);
@@ -357,8 +357,6 @@ void setup()
   timerAttachInterrupt(secTimer, &onTimer, true);
   timerAlarmWrite(secTimer, 1000000, true);
   timerAlarmEnable(secTimer);
-  //
-  MLiotComm.publishBool(RL_ID_BROADCAST, hubid, RL_ID_SYNCHRO, true);
   //
   DEBUGf("heap_caps_get_largest_free_block: %d\n", heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
 }
@@ -403,13 +401,25 @@ void loop()
   //
   if (doMinute) {
     doMinute = false;
-    traiter_nouvelle_minute();
   }
   if (doHour) {
     doHour = false;
   }
   if (doDay) {
     doDay = false;
-    mesures_faites_aujourd_hui = 0;  // Reset journalier
+  }
+  if (onBoot) {
+    onBoot = false;
+    // calculate lower Device ID and send synchro
+    uint8_t minID = 99;
+    CDevice* dev = nullptr;
+    while ((dev = Router.walkDevice(dev)))
+    {
+      uint8_t id = dev->getAddress();
+      if (id < minID) {
+        minID = id;
+      }
+    }
+    MLiotComm.publishNum(RL_ID_BROADCAST, hubid, RL_ID_SYNCHRO, minID);
   }
 }

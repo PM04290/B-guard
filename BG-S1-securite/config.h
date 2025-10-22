@@ -1,6 +1,6 @@
 #pragma once
 
-#define VERSION "1.1"
+#define VERSION "1.2"
 
 #define DEBUG_SERIAL
 #define DSerial Serial
@@ -14,9 +14,6 @@
 #define PIN_MES_VBAT 33
 #define PIN_OUT1     43
 #define PIN_WMODE    44
-#define PIN_485RX    14
-#define PIN_485TX     8
-#define PIN_485DE     9
 
 #define CHILD_ID_VBAT         1
 #define CHILD_ID_BINSENSOR_1  2

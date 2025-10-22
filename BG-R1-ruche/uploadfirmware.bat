@@ -82,7 +82,7 @@ set HEX=!file[%choice%]!
 
 :: Affichage
 echo.
-echo --> Flash de "!HEX!" sur le ATtiny3216 via COM%usedcom%
+echo. Flash de "!HEX!" sur le ATtiny3216 via COM%usedcom%
 echo.
 
 pymcuprog write -t uart -u com%usedcom% -d attiny3216 -f %HEX%

@@ -297,7 +297,7 @@ void sendLocalData()
   docJson["#vbat"] = vbat->getFloat();
   docJson["#sin1"] = BinAlarm1->getValue() > 0 ? "alarme" : "normal";
   docJson["#sin2"] = BinAlarm2->getValue() > 0 ? "alarme" : "normal";
-  docJson["#lumi"] = Lumi->getFloat();
+  docJson["#lumi"] = (int)Lumi->getFloat();
   serializeJson(docJson, js);
   ws.textAll(js);
   //
@@ -428,6 +428,61 @@ void notifyAllConfig()
   }
 }
 
+uint8_t notifyVBat(int32_t data)
+{
+  if (ws.count() > 0)
+  {
+    docJson.clear();
+    docJson["cmd"] = "value";
+    docJson["#vbat"] = vbat->getFloat();
+    String js = "";
+    serializeJson(docJson, js);
+    ws.textAll(js);
+    return true;
+  }
+  return false;
+}
+
+uint8_t notifyLumi(int32_t data)
+{
+  if (ws.count() > 0)
+  {
+    docJson.clear();
+    docJson["cmd"] = "value";
+    docJson["#lumi"] = (int)Lumi->getFloat();
+    String js = "";
+    serializeJson(docJson, js);
+    ws.textAll(js);
+    return true;
+  }
+  return false;
+}
+
+uint8_t notifyAlarm(const char* name, bool data)
+{
+  if (ws.count() > 0)
+  {
+    docJson.clear();
+    docJson["cmd"] = "value";
+    docJson[name] = data ? "alarme" : "normal";
+    String js = "";
+    serializeJson(docJson, js);
+    ws.textAll(js);
+    return true;
+  }
+  return false;
+}
+
+uint8_t notifyAlarm1(int32_t data)
+{
+  return notifyAlarm("#sin1", data);
+}
+
+uint8_t notifyAlarm2(int32_t data)
+{
+  return notifyAlarm("#sin2", data);
+}
+
 uint8_t notifyRelay(int32_t data)
 {
   if (ws.count() > 0)
@@ -472,7 +527,6 @@ uint8_t notifyOutMode(int32_t data)
   }
   return false;
 }
-
 
 void handleWsMessage(void *arg, uint8_t *data, size_t len)
 {
@@ -786,6 +840,9 @@ void onIndexRequest(AsyncWebServerRequest *request)
         html.replace("%CNFOUTMODE_MANU%", RegOut1->getValue() != 1 ? "selected" : "");
         html.replace("%CNFOUTMODE_AUTO%", RegOut1->getValue() == 1 ? "selected" : "");
         html.replace("%CNFLUMMIN%", String((long)LumMin->getValue()));
+        //
+        html.replace("%WIFISSID%", Wifi_ssid);
+        html.replace("%WIFIPASS%", Wifi_pass);
       }
       response->print(html);
     }
@@ -847,46 +904,60 @@ void onConfigRequest(AsyncWebServerRequest * request)
   {
     uid = 100 + request->getParam("cnfcode", true)->value().toInt();
     AP_ssid[strlen(AP_ssid) - 1] = request->getParam("cnfcode", true)->value().c_str()[0];
+    EEPROM.writeChar(EEPROM_DATA_UID, AP_ssid[strlen(AP_ssid) - 1]);
+
     if (request->hasParam("cnffreq", true))
     {
       RadioFreq = request->getParam("cnffreq", true)->value().toInt();
+      EEPROM.writeUShort(EEPROM_DATA_FREQ, RadioFreq);
     }
     if (request->hasParam("cnfdist", true))
     {
       RadioRange = request->getParam("cnfdist", true)->value().toInt();
+      EEPROM.writeByte(EEPROM_DATA_RANGE, RadioRange);
     }
     if (request->hasParam("cnfhubid", true))
     {
       hubid = request->getParam("cnfhubid", true)->value().toInt();
+      EEPROM.writeByte(EEPROM_DATA_HUBID, hubid);
     }
     routeID = 0;
     if (request->hasParam("cnfroute", true))
     {
       routeID = strcmp(request->getParam("cnfroute", true)->value().c_str(), "on") == 0;
+      EEPROM.writeByte(EEPROM_DATA_ROUTEID, routeID);
     }
 
     // Relay automation
     if (request->hasParam("cnfoutmode", true))
     {
       strcmp(request->getParam("cnfoutmode", true)->value().c_str(), "auto") == 0 ? RegOut1->setValue(1) : RegOut1->setValue(0);
+      // Internal EEPROM
     }
     if (request->hasParam("cnflummin", true))
     {
       LumMin->setFloat(request->getParam("cnflummin", true)->value().toInt());
+      // Internal EEPROM
     }
+    // Wifi
+    if (request->hasParam("wifissid", true))
+    {
+      strcpy(Wifi_ssid, request->getParam("wifissid", true)->value().c_str() );
+      EEPROM.writeString(EEPROM_TEXT_OFFSET, Wifi_ssid);
+    }
+    if (request->hasParam("wifissid", true))
+    {
+      strcpy(Wifi_pass, request->getParam("wifipass", true)->value().c_str() );
+      EEPROM.writeString(EEPROM_TEXT_OFFSET + (EEPROM_TEXT_SIZE * 1), Wifi_pass);
+    }
+
+    EEPROM.commit();
 
     DEBUGln(uid);
     DEBUGln(AP_ssid);
     DEBUGln(RadioFreq);
     DEBUGln(hubid);
     DEBUGln(routeID);
-
-    EEPROM.writeChar(EEPROM_DATA_UID, AP_ssid[strlen(AP_ssid) - 1]);
-    EEPROM.writeUShort(EEPROM_DATA_FREQ, RadioFreq);
-    EEPROM.writeByte(EEPROM_DATA_RANGE, RadioRange);
-    EEPROM.writeByte(EEPROM_DATA_HUBID, hubid);
-    EEPROM.writeByte(EEPROM_DATA_ROUTEID, routeID);
-    EEPROM.commit();
   }
   request->send(200, "text/plain", "OK");
 }
@@ -900,12 +971,12 @@ void handleDoUpdate(AsyncWebServerRequest * request, const String & filename, si
     // if filename includes spiffs, update the spiffs partition
     int cmd = (filename.indexOf("spiffs") > -1) ? U_SPIFFS : U_FLASH;
     if (!Update.begin(UPDATE_SIZE_UNKNOWN, cmd)) {
-      Update.printError(Serial);
+      Update.printError(DSerial);
     }
   }
   if (Update.write(data, len) != len)
   {
-    Update.printError(Serial);
+    Update.printError(DSerial);
   }
   if (final)
   {
@@ -915,7 +986,7 @@ void handleDoUpdate(AsyncWebServerRequest * request, const String & filename, si
     request->send(response);
     if (!Update.end(true))
     {
-      Update.printError(Serial);
+      Update.printError(DSerial);
     } else
     {
       DEBUGln("Update complete");

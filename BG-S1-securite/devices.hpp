@@ -451,10 +451,12 @@ class CRouter {
       {
         rl_configParam_t cnfp;
         memset(&cnfp, 0, sizeof(cnfp));
+        DEBUGf("Send pairing done for %d\n", address);
         MLiotComm.publishConfig(address, hubid, (rl_configs_t*)&cnfp, C_END);
         dev->setPairing(false);
         return true;
       }
+      DEBUGf("Device %d not found\n", address);
       return false;
     }
     void displayState(rl_packet_t* cp)

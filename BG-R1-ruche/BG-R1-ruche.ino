@@ -60,9 +60,6 @@ SoftwareSerial DSerial(PIN_RX, PIN_TX); // (RX, TX)
 #endif
 
 #define ML_SX1278
-//#define ML_MAX485_PIN_RX MOSI
-//#define ML_MAX485_PIN_TX MISO
-//#define ML_MAX485_PIN_DE RL_DEFAULT_SS_PIN
 #include <MLiotComm.h>
 #include <MLiotElements.h>
 
@@ -86,6 +83,18 @@ bool pairingPending = false;
 uint32_t needSynchro = 0;
 bool needTare = false;
 bool needCalibration = false;
+
+// buffer table for LoRa incoming packet
+#define MAX_PACKET 20
+typedef struct __attribute__((packed))
+{
+  uint8_t version;
+  int lqi;
+  rl_packets packets;
+} packet_version;
+packet_version packetTable[MAX_PACKET];
+volatile byte idxReadTable = 0;
+volatile byte idxWriteTable = 0;
 
 // RadioLink IDs
 #define CHILD_ID_VBAT        1
@@ -156,12 +165,115 @@ ISR(TCA0_OVF_vect) {
   for (uint8_t i = 0; i < NUM_SLICES; i++) {
     totalSlice += slices[i];
   }
-  //DEBUGln(totalSlice);
   if (totalSlice > 100) {
     sleepCounter = 0x1FFF;
   }
 }
 
+bool getPacket(packet_version* p)
+{
+  if (idxReadTable != idxWriteTable)
+  {
+    *p = packetTable[idxReadTable];
+    //
+    idxReadTable++;
+    if (idxReadTable >= MAX_PACKET)
+    {
+      idxReadTable = 0;
+    }
+    return true;
+  }
+  return false;
+}
+
+void onLoRaReceive(uint8_t len, rl_packet_t* p)
+{
+  noInterrupts();
+  memcpy(&packetTable[idxWriteTable].packets.current, p, len);
+  packetTable[idxWriteTable].version = 1;
+  packetTable[idxWriteTable].lqi = MLiotComm.lqi();
+  if (len == RL_PACKETV1_SIZE) packetTable[idxWriteTable].version = 1;
+  idxWriteTable++;
+  if (idxWriteTable >= MAX_PACKET)
+  {
+    idxWriteTable = 0;
+  }
+  if (idxWriteTable == idxReadTable) // overload
+  {
+    idxReadTable++;
+    if (idxReadTable >= MAX_PACKET)
+    {
+      idxReadTable = 0;
+    }
+  }
+  interrupts();
+}
+
+void processLoRa()
+{
+  packet_version p;
+  if (getPacket(&p))
+  {
+    rl_packet_t* pIn = &p.packets.current;
+    DEBUG(pIn->senderID); DEBUG(" => "); DEBUG(pIn->destinationID); DEBUG(":"); DEBUGln(pIn->childID);
+    if (pIn->destinationID == RL_ID_BROADCAST)
+    {
+      if ((pIn->senderID == hubid) && (pIn->childID == RL_ID_SYNCHRO))
+      {
+        uint8_t minID = pIn->data.num.value;                // Hub send lower ID off network
+        uint8_t delta = uid - minID;                        // position from mini ID
+        uint16_t packetTime[] = { 30, 200, 700, 1500 };     // busy time of one packet for range
+        uint16_t sendingTime = packetTime[LRrange % 4] * 9;
+        needSynchro = (millis() + 500 + (sendingTime * delta)) | 1;
+        return;
+      }
+      return;
+    }
+    if (pIn->destinationID == uid)
+    {
+      if (pairingPending && pIn->childID == RL_ID_CONFIG)
+      {
+        rl_conf_t cnfIdx = (rl_conf_t)(pIn->sensordataType & 0x07);
+        if (cnfIdx == C_PARAM)
+        {
+          rl_configParam_t* pcnfp = (rl_configParam_t*)&pIn->data.configs;
+          if (pcnfp->childID == 0) // 0 is value to change UID device
+          {
+            uid = pcnfp->pInt;
+            EEPROM.put(EEP_UID, uid);
+            DEBUG("New ID "); DEBUGln(uid);
+          }
+        }
+        if (cnfIdx == C_END)
+        {
+          // HUB who send C_END become destination HUB
+          hubid = pIn->senderID;
+          EEPROM.put(EEP_HUBID, hubid);
+          pairingPending = false;
+        }
+        return;
+      }
+      if (ScaleWeightRef && pIn->childID == CHILD_ID_WEIGHTREF)
+      {
+        float f = (float)pIn->data.num.value / (float)pIn->data.num.divider;
+        ScaleWeightRef->setFloat(f);
+        return;
+      }
+      if (ScaleTare && (pIn->childID == CHILD_ID_SCALE_TARE))
+      {
+        needTare = true;
+        DEBUGln("Set tare");
+        return;
+      }
+      if (ScaleWeightRef && pIn->childID == CHILD_ID_SCALE_CALIB)
+      {
+        needCalibration = true;
+        DEBUGln("Set calibration");
+        return;
+      }
+    }
+  }
+}
 void onTilt()
 {
   slices[currentSlice]++;
@@ -178,8 +290,6 @@ void setup()
   DEBUGinit();
   DEBUGln(F("\nStart"));
   LED_INIT;
-
-  // TODO : button on SDA to start Tare calibration
 
   // use nRST pin from LoRa module to active "pairing"
   pinMode(RL_DEFAULT_RESET_PIN, INPUT);
@@ -280,20 +390,20 @@ void setup()
 #endif
 
   // start LoRa module
-  LoraOK = MLiotComm.begin(LRfreq * 1E6, onReceive, NULL, 14, LRrange);
-  //LoraOK = MLiotComm.begin(115200, onReceive, NULL);
+  LoraOK = MLiotComm.begin(LRfreq * 1E6, onLoRaReceive, NULL, 14, LRrange);
   if (LoraOK)
   {
     DEBUGln(F("LoRa OK"));
     if (needPairing)
-    { // send painring configuration and wait acknowledge
+    { // send pairing configuration and wait acknowledge
       hubid = RL_ID_BROADCAST;
       deviceManager.publishConfigElements(F("Ruche"), F("BG-R1"));
       pairingPending = true;
       while (pairingPending)
-      { // wait for receive acknowledge from HUB (see "onReceive")
+      { // wait for receive acknowledge from HUB
         uint32_t tick = millis() / 3;
         LED_PWM(abs((tick % 511) - 255));
+        processLoRa();
       }
     }
   } else
@@ -336,6 +446,8 @@ void setup()
 void loop()
 {
   bool isSynchro = false;
+
+  processLoRa();
   if (needSynchro && (millis() > needSynchro))
   {
     isSynchro = true;
@@ -368,12 +480,10 @@ void loop()
     //
     needCalibration = false;
   }
-#ifdef ML_MAX485_PIN_DE
-  RLhelper.process();
-#endif
 
   if (LoraOK && ((sleepCounter >= 10) || isSynchro))
   {
+    LED_ON;
     sleepCounter = 0;
     ADC0.CTRLA |= ADC_ENABLE_bm;  // enable ADC
     BGR2_scale.powerUp();
@@ -384,6 +494,7 @@ void loop()
     //
     BGR2_scale.powerDown();
     ADC0.CTRLA &= ~ADC_ENABLE_bm;  // disable ADC
+    LED_OFF;
   }
 }
 
@@ -437,65 +548,3 @@ float onReadNAU7802(uint16_t pinData, uint16_t p1, uint16_t p2, uint16_t p3)
   return -99.9;
 }
 #endif
-
-void onReceive(uint8_t len, rl_packet_t* pIn)
-{
-  // ***************************************
-  // ! ! ! don't publish anything here ! ! !
-  // ! ! ! and stay short time         ! ! !
-  // ***************************************
-  if (len == 0) return;
-
-  if (pIn->destinationID == RL_ID_BROADCAST)
-  {
-    if ((pIn->senderID == hubid) && (pIn->childID == RL_ID_SYNCHRO))
-    {
-      needSynchro = (millis() + 1000 + (uid * 30)) | 1; // TODO régler la tempo
-      return;
-    }
-    return;
-  }
-  if (pIn->destinationID == uid)
-  {
-    if (pairingPending && pIn->childID == RL_ID_CONFIG)
-    {
-      rl_conf_t cnfIdx = (rl_conf_t)(pIn->sensordataType & 0x07);
-      if (cnfIdx == C_PARAM)
-      {
-        rl_configParam_t* pcnfp = (rl_configParam_t*)&pIn->data.configs;
-        if (pcnfp->childID == 0) // 0 is value to change UID device
-        {
-          uid = pcnfp->pInt;
-          EEPROM.put(EEP_UID, uid);
-          DEBUG("New ID "); DEBUGln(uid);
-        }
-      }
-      if (cnfIdx == C_END)
-      {
-        // HUB who send C_END become destination HUB
-        hubid = pIn->senderID;
-        EEPROM.put(EEP_HUBID, hubid);
-        pairingPending = false;
-      }
-      return;
-    }
-    if (ScaleWeightRef && pIn->childID == CHILD_ID_WEIGHTREF)
-    {
-      float f = (float)pIn->data.num.value / (float)pIn->data.num.divider;
-      ScaleWeightRef->setFloat(f);
-      return;
-    }
-    if (ScaleTare && (pIn->childID == CHILD_ID_SCALE_TARE))
-    {
-      needTare = true;
-      DEBUGln("Set tare");
-      return;
-    }
-    if (ScaleWeightRef && pIn->childID == CHILD_ID_SCALE_CALIB)
-    {
-      needCalibration = true;
-      DEBUGln("Set calibration");
-      return;
-    }
-  }
-}
