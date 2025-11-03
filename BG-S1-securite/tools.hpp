@@ -7,74 +7,30 @@ void heap_caps_alloc_failed_hook(size_t requested_size, uint32_t caps, const cha
 #endif
 }
 
-void listDir(const char * dirname)
-{
-  DEBUGf("Listing directory: %s\n", dirname);
-  File root = SPIFFS.open(dirname);
-  if (!root.isDirectory())
-  {
-    DEBUGln("No Dir");
+float getSimulatedLux(int hour, int minute) {
+  // Convertir l'heure en fraction du jour (0.0 = minuit, 0.5 = midi)
+  float timeOfDay = (hour * 60.0 + minute) / 1440.0; // 1440 = minutes/jour
+
+  // Sinusoïde centrée sur midi (0.5)
+  // La luminosité est nulle de 18h à 6h (nuit)
+  float lux = 0.0;
+  if (timeOfDay >= 0.25 && timeOfDay <= 0.75) { // entre 6h et 18h
+    // Mappe la plage [6h..18h] sur [0..PI]
+    float angle = (timeOfDay - 0.25) * (PI / 0.5);
+    lux = 100000.0 * sin(angle);
   }
-  File file = root.openNextFile();
-  while (file)
-  {
-    DEBUGf(" %-30s %d\n", file.name(), file.size());
-    file = root.openNextFile();
-  }
+
+  return lux;
 }
-
-boolean isValidFloat(String str)
-{
-  if (str.startsWith("-"))
-    str.remove(0, 1);
-  for (byte i = 0; i < str.length(); i++)
-  {
-    if (!isDigit(str.charAt(i)) && (str.charAt(i) != '.'))
-    {
-      return false;
-    }
-  }
-  return str.length() > 0;
-}
-
-boolean isValidInt(String str)
-{
-  if (str.startsWith("-"))
-    str.remove(0, 1);
-  for (byte i = 0; i < str.length(); i++)
-  {
-    if (!isDigit(str.charAt(i)))
-    {
-      return false;
-    }
-  }
-  return str.length() > 0;
-}
-
-String getValue(String data, char separator, int index)
-{
-  int found = 0;
-  int strIndex[] = { 0, -1 };
-  int maxIndex = data.length() - 1;
-
-  for (int i = 0; i <= maxIndex && found <= index; i++)
-  {
-    if (data.charAt(i) == separator || i == maxIndex)
-    {
-      found++;
-      strIndex[0] = strIndex[1] + 1;
-      strIndex[1] = (i == maxIndex) ? i + 1 : i;
-    }
-  }
-  return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
-}
-
 float onAnalogLumi(uint16_t adcRAW, uint16_t r_fixed, uint16_t p2, uint16_t p3)
 {
-  float voltage = (adcRAW * 3.3) / 4095UL;
-  float r_ldr = (voltage * r_fixed) / (3.3 - voltage);
-  float lux = 500 / pow(r_ldr / 1000.0, 1.4);
-  return adcRAW;//lux;
+  return getSimulatedLux(cntHour, cntMinute);
+  /* TODO
+    float voltage = (adcRAW * 3.3) / 4095UL;
+    float r_ldr = (voltage * r_fixed) / (3.3 - voltage);
+    float lux = 500 / pow(r_ldr / 1000.0, 1.4);
+    return adcRAW;//lux;
+  */
 }
 
 #define T_REF       298.15 // nominal temperature (Kelvin) (25°)
@@ -83,7 +39,7 @@ float onAnalogNTC(uint16_t adcNTC, uint16_t beta, uint16_t resistor, uint16_t th
 {
   float celcius = NAN;
   // ! formula with NTC on GND
-  float r_ntc = (float)resistor / (1023. / (float)adcNTC - 1.);
+  float r_ntc = (float)resistor / (4096. / (float)adcNTC - 1.);
   celcius = r_ntc / (float)thermistor;
   celcius = log(celcius);
   celcius /= beta;

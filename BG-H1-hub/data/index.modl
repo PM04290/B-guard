@@ -1,0 +1,64 @@
+{§CHILD_LINE
+  <label class="col-1"><input type="text" name="dev_#D#_childs_#C#_id" value="%CNFC_ID%" readonly></label>
+  <label class="col-2"><input type="text" name="dev_#D#_childs_#C#_label" value="%CNFC_LABEL%" %CNFC_LABELVALID% ></label>
+  <label class="col-1">%CNFL_MIN%</label>
+  <label class="col-1">%CNFL_MAX%</label>
+  <label class="col-1">%CNFL_COEFA%</label>
+  <label class="col-1">%CNFL_COEFB%</label>
+  <label class="col-2">%CNFL_CLASS%</label>
+  <label class="col-2">%CNFL_CATEG%</label>
+§}
+{§DEV_FORM
+<form action="/doconfig" id="form_#D#" role="form" onsubmit="postdev(event)">
+<article id="conf_#D#">
+<header id="header_#D#">%GENHEADER%</header>
+<div id="pairing_#D#" class="row">%GENPAIRING%</div>
+<div class="row">
+  <label class="col-1">ID</label>
+  <label class="col-2">Label</label>
+  <label class="col-1">Min</label>
+  <label class="col-1">Max</label>
+  <label class="col-1">Coef.A</label>
+  <label class="col-1">Coef.B</label>
+  <label class="col-2">Class</label>
+  <label class="col-2">Category</label>
+</div>
+<footer id="footer_#D#">
+<div class="row">
+<div class="col-1"><input class="secondary" type="submit" value="Save"></div>
+<div class="offset-10 col-1"><a href="#modal" role="button" data-target="modalha" onclick="deldev(event, #D#)" style="float: right">🗑</a></div>
+</div>
+</footer>
+</article>
+</form>
+§}
+{§DEV_HEAD
+<div class="row">
+<div class="col-6">
+➜ <kbd>#D#</kbd> ┉ <kbd>%CNFMODEL%</kbd> ┉ <kbd>%CNFNAME%</kbd>
+<input type="hidden" id="cnfdev" name="cnfdev" value="#D#">
+</div>
+</div>
+§}
+{§DEV_PAIRING
+<div class="row" style="padding-top: 0.5rem;border: red 2px solid;border-radius: var(--border-radius);">
+<div class="col-1"><input type="number" min="10" max="239" id="newadr_#D#" value="%CNFNEWADR%"></div>
+<div class="col-2"><input type="button" value="Change Nr" onclick="changeAdr(#D#)"></div>
+<div class="offset-2 col-2"><input type="button" value="Finish pairing" onclick="endPairing(#D#)"></div>
+</div>
+§}
+{§CHILD_MODAL
+    <input type="text" value="%CNFC_STYPE_STR%" readonly >
+    <input type="text" value="%CNFC_UNIT%" readonly>
+    <input type="text" value="%CNFC_OPT%" readonly>
+    <input type="text" value="%CNFC_IMIN%" readonly>
+    <input type="text" value="%CNFC_IMAX%" readonly>
+    <input type="text" value="%CNFC_IDIV%" readonly>
+§}
+{§DEV_MONITOR
+<article id="mon_data_#D#">
+  <header>%CNFNAME% #D#</header>
+  <div class="grid" id="mon_entity_#D#">
+  </div>
+</article>
+§}

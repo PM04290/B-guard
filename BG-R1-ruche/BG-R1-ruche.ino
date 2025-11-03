@@ -1,5 +1,5 @@
 /*
-  Version 1.0
+  Version 1.3
   Designed for ATTiny3216 (internal oscillator 4MHz)
   Hardware : GB-R1 ruche v1.0 (min)
 
@@ -81,6 +81,7 @@ bool LoraOK = false;
 bool needPairing = false;
 bool pairingPending = false;
 uint32_t needSynchro = 0;
+
 bool needTare = false;
 bool needCalibration = false;
 
@@ -223,9 +224,8 @@ void processLoRa()
         uint8_t minID = pIn->data.num.value;                // Hub send lower ID off network
         uint8_t delta = uid - minID;                        // position from mini ID
         uint16_t packetTime[] = { 30, 200, 700, 1500 };     // busy time of one packet for range
-        uint16_t sendingTime = packetTime[LRrange % 4] * 9;
-        needSynchro = (millis() + 500 + (sendingTime * delta)) | 1;
-        return;
+        uint32_t sendingTime = packetTime[LRrange % 4] * 9;
+        needSynchro = (millis() + 2000 + (sendingTime * delta)) | 1;
       }
       return;
     }
@@ -313,7 +313,7 @@ void setup()
   if (uid == 0xFF)
   { // blank EEPROM (factory settings)
     DEBUGln(F("Initialize EEPROM"));
-    uid = 70;
+    uid = 30;
     hubid = 0;
 
     // update
@@ -374,10 +374,10 @@ void setup()
   Wire.setClock(400000); //Qwiic Scale is capable of running at 400kHz if desired
   if (BGR2_scale.begin())
   {
-    Analog* HiveWeight = (Analog*)deviceManager.addElement(new Analog(PIN_NONE, CHILD_ID_WEIGHT, F("Weight"), F("Kg"), 0.1, 10));
+    Analog* HiveWeight = (Analog*)deviceManager.addElement(new Analog(PIN_NONE, CHILD_ID_WEIGHT, F("Weight"), F("kg"), 0.1, 10));
     HiveWeight->setParams(onReadNAU7802, 0, 0, 0);// set parameters (none, none, none)
     ScaleTare = (Button*)deviceManager.addElement(new Button(CHILD_ID_SCALE_TARE, F("Tare")));
-    ScaleWeightRef = (Input*)deviceManager.addElement(new Input(CHILD_ID_WEIGHTREF, EEP_WREF, F("Weight ref"), F("Kg")));
+    ScaleWeightRef = (Input*)deviceManager.addElement(new Input(CHILD_ID_WEIGHTREF, EEP_WREF, F("Weight ref"), F("kg")));
     ScaleCalib = (Button*)deviceManager.addElement(new Button(CHILD_ID_SCALE_CALIB, F("Calib")));
     BGR2_scale.setZeroOffset(scaleTare);
     BGR2_scale.setCalibrationFactor(scaleCalibration);
@@ -481,7 +481,7 @@ void loop()
     needCalibration = false;
   }
 
-  if (LoraOK && ((sleepCounter >= 10) || isSynchro))
+  if (LoraOK && ((sleepCounter >= 30) || isSynchro))
   {
     LED_ON;
     sleepCounter = 0;
@@ -490,6 +490,7 @@ void loop()
     // Walk any sensor in Module to send data
     deviceManager.processElements();
     deviceManager.sendElements(isSynchro);
+    //
     needSynchro = 0;
     //
     BGR2_scale.powerDown();
