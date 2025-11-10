@@ -830,7 +830,8 @@ class CHub {
         JsonArray devs = _configJson["dev"];
         for (JsonArray::iterator it = devs.begin(); it != devs.end(); ++it)
         {
-          if ((*it)["address"] == address) {
+          if ((*it)["address"] == address)
+          {
             devs.remove(it);
           }
         }
@@ -931,6 +932,7 @@ class CHub {
     void pairingConfig(rl_packet_t* cp)
     {
       CDevice* dev = getDeviceByAddress(cp->senderID);
+      DEBUGf("getDeviceByAddress for %d : %d\n", cp->senderID, (long)dev);
       CEntity* ent = getEntityById(cp->senderID, cp->data.configs.base.childID);
       rl_conf_t cnfIdx = (rl_conf_t)(cp->sensordataType & 0x07);
       if (cnfIdx == C_BASE)
@@ -956,6 +958,10 @@ class CHub {
             DEBUGf("Added Device %d %s\n", cp->senderID, cnfb->name);
             dev->setPairing(true);
             notifyDeviceForm(cp->senderID);
+
+      String Jres;
+      size_t Lres = serializeJson(_configJson, Jres);
+      DEBUGln(Jres);
           } else
           {
             DEBUGf("** Error adding new Device %d\n", cp->senderID);
@@ -1210,8 +1216,8 @@ class CHub {
       file.close();
       if (error)
       {
-        DEBUGln("failed to deserialize config file");
-        return false;
+        DEBUGln("failed to deserialize config file, new one");
+        _configJson["dev"].to<JsonArray>();
       }
       // walk device array
       JsonVariant devices = _configJson["dev"];

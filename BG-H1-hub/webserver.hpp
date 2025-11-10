@@ -4,6 +4,9 @@
 #include <Update.h>      // native library
 #include <WiFiClientSecure.h>
 #include <queue>
+#ifdef USE_ETHERNET
+#include <ETH.h>         // native library
+#endif
 
 enum WMode {
   Mode_WifiSTA = 0,
@@ -289,6 +292,18 @@ String getHTMLforChildLine(uint8_t address, uint8_t id)
           blocC.replace("%CNF_CAT1_DS%", "disabled");
           blocC.replace("%CNF_CAT2_DS%", ec == CategoryDiagnostic ? "selected" : "");
           break;
+        case E_COVER:
+          blocC.replace("%CNFL_CLASS%", "");
+          blocC.replace("%CNFL_CATEG%", html_child_line_categ);
+          blocC.replace("%CNFL_MIN%", "");
+          blocC.replace("%CNFL_MAX%", "");
+          blocC.replace("%CNFL_COEFA%", "");
+          blocC.replace("%CNFL_COEFB%", "");
+          //
+          blocC.replace("%CNF_CAT0_DS%", ec == CategoryAuto ? "selected" : "");
+          blocC.replace("%CNF_CAT1_DS%", "disabled");
+          blocC.replace("%CNF_CAT2_DS%", "disabled");
+          break;
         case E_SELECT:
           blocC.replace("%CNFL_CLASS%", "");
           blocC.replace("%CNFL_CATEG%", html_child_line_categ);
@@ -300,6 +315,18 @@ String getHTMLforChildLine(uint8_t address, uint8_t id)
           blocC.replace("%CNF_CAT0_DS%", ec == CategoryAuto ? "selected" : "");
           blocC.replace("%CNF_CAT1_DS%", ec == CategoryConfig ? "selected" : "");
           blocC.replace("%CNF_CAT2_DS%", "disabled");
+          break;
+        case E_TEXTSENSOR:
+          blocC.replace("%CNFL_CLASS%", "");
+          blocC.replace("%CNFL_CATEG%", html_child_line_categ);
+          blocC.replace("%CNFL_MIN%", "");
+          blocC.replace("%CNFL_MAX%", "");
+          blocC.replace("%CNFL_COEFA%", "");
+          blocC.replace("%CNFL_COEFB%", "");
+          //
+          blocC.replace("%CNF_CAT0_DS%", ec == CategoryAuto ? "selected" : "");
+          blocC.replace("%CNF_CAT1_DS%", "disabled");
+          blocC.replace("%CNF_CAT2_DS%", ec == CategoryDiagnostic ? "selected" : "");
           break;
         case E_INPUTNUMBER:
           blocC.replace("%CNFL_CLASS%", "");
@@ -460,6 +487,9 @@ String getHTML_ChildMonitor(uint8_t address, uint8_t id)
           if (ent->getState() == "1") eltBody += "checked";
           eltFooter += " onclick='switchMonitor(this,#D#,#C#)'>";
           break;
+        case E_COVER:
+          eltFooter = " TODO ";
+          break;
         case E_SELECT:
           sTmp = ent->getSelectOptions();
           DEBUGln(sTmp);
@@ -481,8 +511,8 @@ String getHTML_ChildMonitor(uint8_t address, uint8_t id)
           }
           step = 1. / ent->getNumberDiv();
           eltFooter = "<input type='number' id='mon_#D#_#C#' min='"
-                    + String(ent->getNumberMin()) + "' max='"
-                    + String(ent->getNumberMax()) + "' step='" + String(step) + "' value='" + ent->getState() + "'>";
+                      + String(ent->getNumberMin()) + "' max='"
+                      + String(ent->getNumberMax()) + "' step='" + String(step) + "' value='" + ent->getState() + "'>";
           break;
         case E_BUTTON:
           blocC.replace("#HEADER#", "");
@@ -696,7 +726,7 @@ void notifyState(uint8_t d, uint8_t c, String val)
             docJson["#mon_" + String(d) + "_" + String(c)] = val;
             break;
           case E_TEXTSENSOR:
-            docJson["cmd"] = "checked";
+            docJson["cmd"] = "value";
             docJson["#mon_" + String(d) + "_" + String(c)] = val;
             break;
           case E_INPUTNUMBER:
@@ -743,6 +773,65 @@ void notifyAllConfig()
 
 }
 
+void notifyLogPacket(rl_packet_t* p, int lqi)
+{
+  if (ws.count() > 0)
+  {
+    String s = "(📶 " + String(lqi) + ") " + String(p->destinationID) + " <= " + String(p->senderID) + ":";
+    if (p->childID == RL_ID_CONFIG && (rl_element_t)(p->sensordataType >> 3) == E_CONFIG)
+    {
+      rl_configs_t* cnf = &p->data.configs;
+      if (cnf->base.childID == RL_ID_CONFIG) {
+        s = s + "⚑";
+      } else {
+        s = s + String(cnf->base.childID);
+      }
+      s = s + " ➽ ";
+      rl_conf_t cnfIdx = (rl_conf_t)(p->sensordataType & 0x07);
+      switch (cnfIdx) {
+        case C_BASE:
+          s = s + "B " + String(cnf->base.name);
+          break;
+        case C_UNIT:
+          s = s + "U " + String(cnf->text.text);
+          break;
+        case C_OPTS:
+          s = s + "O " + String(cnf->text.text);;
+          break;
+        case C_NUMS:
+          s = s + "N " + String(cnf->nums.mini) + ".." + String(cnf->nums.maxi);
+          break;
+        case C_END:
+          s = s + "E ☑";
+          break;
+        default:
+          s = s + "? ";
+          break;
+      }
+    } else {
+      s = s + String(p->childID) + " = ";
+      rl_data_t dt = (rl_data_t)(p->sensordataType & 0x07);
+      switch (dt) {
+        case D_TEXT:
+          s = s + String(p->data.text);
+          break;
+        case D_FLOAT:
+          s = s + String(float(p->data.num.value) / float(p->data.num.divider));
+          break;
+        default:
+          s = s + String(p->data.num.value);
+          break;
+      }
+    }
+    docJson.clear();
+    docJson["cmd"] = "log";
+    docJson["packet"] = s;
+    String js;
+    serializeJson(docJson, js);
+    ws.textAll(js);
+  }
+}
+
 void handleWsMessage(void *arg, uint8_t *data, size_t len)
 {
   String js;
@@ -755,6 +844,10 @@ void handleWsMessage(void *arg, uint8_t *data, size_t len)
     String p1 = getValue((char*)data, ';', 1);
     String p2 = getValue((char*)data, ';', 2);
     String p3 = getValue((char*)data, ';', 3);
+    if (cmd == "logpacket")
+    {
+      logPacket = (p1 == "1");
+    }
     if (cmd == "deldev")
     {
       Hub.delDevice(p1.toInt());
@@ -953,6 +1046,38 @@ void WiFiEvent(WiFiEvent_t event)
     case ARDUINO_EVENT_WIFI_STA_GOT_IP6:
       DEBUGln("STA IPv6 is preferred");
       break;
+#ifdef USE_ETHERNET
+    case ARDUINO_EVENT_ETH_GOT_IP6:
+      DEBUGln("ETH IPv6 is preferred");
+      break;
+    case ARDUINO_EVENT_ETH_START:
+      DEBUGln("ETH started");
+      ETH.setHostname(AP_ssid);
+      break;
+    case ARDUINO_EVENT_ETH_STOP:
+      DEBUGln("ETH stopped");
+      break;
+    case ARDUINO_EVENT_ETH_CONNECTED:
+      DEBUGln("ETH connected");
+      break;
+    case ARDUINO_EVENT_ETH_DISCONNECTED:
+      DEBUGln("ETH disconnected");
+      break;
+    case ARDUINO_EVENT_ETH_GOT_IP:
+      DEBUGln("ETH Obtained IP address");
+      DEBUG("ETH MAC: ");
+      DEBUG(ETH.macAddress());
+      DEBUG(", IPv4: ");
+      DEBUG(ETH.localIP());
+      if (ETH.fullDuplex()) {
+        DEBUG(", FULL_DUPLEX");
+      }
+      DEBUG(", ");
+      DEBUG(ETH.linkSpeed());
+      DEBUGln("Mbps");
+      Hub.MQTTconnect();
+      break;
+#endif
     default:
       DEBUGf("[WiFi-event] %d \n", event);
       break;
@@ -969,6 +1094,7 @@ void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventT
       break;
     case WS_EVT_DISCONNECT:
       DEBUGf("WebSocket client #%u disconnected\n", client->id());
+      logPacket &= ws.count() > 0;
       break;
     case WS_EVT_DATA:
       handleWsMessage(arg, data, len);
@@ -983,14 +1109,30 @@ void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventT
 uint8_t getWMODE()
 {
   uint8_t wmode = Mode_WifiSTA;
-  if (digitalRead(PIN_WMODE) == LOW || strlen(Wifi_ssid) == 0) {
+  uint8_t ethOK = false;
+  int wm = analogRead(PIN_WMODE);
+  DEBUGf("WM(mv) : %d\n", wm);
+#ifdef USE_ETHERNET
+  if (ethOK || (wm > 125 && wm < 3970)) {  //  Ethernet from 0.1 to 3.2v or LINK
+    wmode = Mode_Ethernet;
+    DEBUGln("WMode : Ethernet");
+  } else
+#endif
+  if (wm < 125) {                  // AP under 0.1v
     wmode = Mode_WifiAP;
-    DEBUGf("WMode : Wifi AP\n");
-  } else {
-    DEBUGf("WMode : Wifi STA\n");
+    DEBUGln("WMode : Wifi AP");
+  } else {                                // STA up to 3.2v
+    DEBUGln("WMode : Wifi STA");
   }
   return wmode;
 }
+
+#ifdef USE_ETHERNET
+void startETH()
+{
+  ETH.begin();
+}
+#endif
 
 void startWifiSTA()
 {
@@ -1026,8 +1168,12 @@ void initNetwork()
   byte mac[6];
   WiFi.onEvent(WiFiEvent);
 
+#ifdef USE_ETHERNET
+  ETH.macAddress(mac);
+#else
   pinMode(PIN_WMODE, INPUT_PULLUP); // Wifi STA by default (Short cut to GND to have AP)
   WiFi.macAddress(mac);
+#endif
   byteArrayToStr(HAuniqueId, mac, 6);
 
   switch (getWMODE()) {
@@ -1037,6 +1183,11 @@ void initNetwork()
     case Mode_WifiAP:
       startWifiAP();
       break;
+#ifdef USE_ETHERNET
+    case Mode_Ethernet:
+      startETH();
+      break;
+#endif
   }
 
   if (MDNS.begin(AP_ssid))

@@ -32,6 +32,7 @@ uint16_t RadioFreq = 433;
 uint8_t RadioRange = 1;
 bool loraOK;
 bool pairModulePending = false;
+bool logPacket = false;
 
 JsonDocument docJson;
 
@@ -137,7 +138,49 @@ void processLoRa()
 
     rl_packet_t* cp = &p.packets.current;
 
-    DEBUGf("%d => %d[%d]\n", cp->senderID, cp->destinationID, cp->childID);
+    if (cp->childID == RL_ID_CONFIG && (rl_element_t)(cp->sensordataType >> 3) == E_CONFIG)
+    {
+      rl_conf_t cnfIdx = (rl_conf_t)(cp->sensordataType & 0x07);
+      rl_configs_t* cnf = &cp->data.configs;
+      uint8_t child = cnf->base.childID;
+      switch (cnfIdx) {
+        case C_BASE:
+          DEBUGf("V%d[%d%%] %d <= %d:%d ⚙ B = %s\n", p.version, p.lqi, cp->destinationID, cp->senderID, child, cnf->base.name);
+          break;
+        case C_UNIT:
+          DEBUGf("V%d[%d%%] %d <= %d:%d ⚙ U = %s\n", p.version, p.lqi, cp->destinationID, cp->senderID, child, cnf->text.text);
+          break;
+        case C_OPTS:
+          DEBUGf("V%d[%d%%] %d <= %d:%d ⚙ O = %s\n", p.version, p.lqi, cp->destinationID, cp->senderID, child, cnf->text.text);
+          break;
+        case C_NUMS:
+          DEBUGf("V%d[%d%%] %d <= %d:%d ⚙ N = %d %d\n", p.version, p.lqi, cp->destinationID, cp->senderID, child, cnf->nums.mini, cnf->nums.maxi);
+          break;
+        case C_END:
+          DEBUGf("V%d[%d%%] %d <= %d:%d ⚙ E\n", p.version, p.lqi, cp->destinationID, cp->senderID, child);
+          break;
+        default:
+          DEBUGf("V%d[%d%%] %d <= %d:%d ⚙ ? = %d\n", p.version, p.lqi, cp->destinationID, cp->senderID, child, cp->data.num.value);
+          break;
+      }
+    } else {
+      rl_data_t dt = (rl_data_t)(cp->sensordataType & 0x07);
+      switch (dt) {
+        case D_TEXT:
+          DEBUGf("V%d[%d%%] %d <= %d:%d = %s\n", p.version, p.lqi, cp->destinationID, cp->senderID, cp->childID, cp->data.text);
+          break;
+        case D_FLOAT:
+          DEBUGf("V%d[%d%%] %d <= %d:%d = %f\n", p.version, p.lqi, cp->destinationID, cp->senderID, cp->childID, float(cp->data.num.value) / float(cp->data.num.divider));
+          break;
+        default:
+          DEBUGf("V%d[%d%%] %d <= %d:%d = %d\n", p.version, p.lqi, cp->destinationID, cp->senderID, cp->childID, cp->data.num.value);
+          break;
+      }
+    }
+    if (logPacket)
+    { // log packet requested by client web page
+      notifyLogPacket(cp, p.lqi);
+    }
     if (cp->destinationID == RL_ID_BROADCAST)
     {
       // pairing

@@ -11,8 +11,10 @@
 #define PIN_WMODE 13 // MLH1
 #elif defined(ARDUINO_ESP32_POE_ISO) || defined(ARDUINO_ESP32_POE)
 #define PIN_WMODE 32 // MLH2
+#define USE_ETHERNET
 #elif defined(ARDUINO_WT32_ETH01)
 #define PIN_WMODE 32 // MLH3
+#define USE_ETHERNET
 #elif defined(ARDUINO_D1_MINI32)
 #define PIN_WMODE 32 // MLH4
 #elif defined(ARDUINO_TTGO_LoRa32_v21new)
