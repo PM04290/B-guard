@@ -1,23 +1,26 @@
 #pragma once
 
-#define VERSION "1.0"
+#define VERSION "1.1"
 
 #define DEBUG_SERIAL
 #define DSerial Serial
 
 #define DEBUG_LED
 
-// TODO              V1.1    V2.0
-#define PIN_MES_VBAT  33  //  33
-#define PIN_IN1       16  //  16
-#define PIN_IN2       18  //  18
-#define PIN_IN3       34  //  34
-#define PIN_LDR       38  //  38
-#define PIN_OUT1      43  //   7
-#define PIN_OUT2       8  //   8
-#define PIN_WMODE     44  //  44
-#define PIN_CFG       44  //  43
-#define PIN_DEBUG_LED 21  //  21
+#define PIN_MES_VBAT  33
+#define PIN_IN1       16
+#define PIN_IN2       18
+#define PIN_IN3       34
+#define PIN_LDR       38
+#define PIN_OUT1       7
+#define PIN_OUT2       8
+#define PIN_WMODE     44
+#define PIN_CFG       43
+#define PIN_DEBUG_LED 21
+
+#define PIN_LORALAN_RST 6
+#define PIN_LORALAN_DIO 4
+#define PIN_LORALAN_NSS 9
 
 #define CHILD_ID_VBAT         1
 #define CHILD_ID_BINSENSOR_1  2

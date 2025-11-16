@@ -60,7 +60,7 @@ SoftwareSerial DSerial(PIN_RX, PIN_TX); // (RX, TX)
 #endif
 
 #define ML_SX1278
-#include <MLiotComm.h>
+#include <MLotaComm.h>
 #include <MLiotElements.h>
 
 // EEPROM dictionnary
@@ -75,8 +75,8 @@ SoftwareSerial DSerial(PIN_RX, PIN_TX); // (RX, TX)
 extern uint8_t uid;
 extern uint8_t hubid;
 
-const uint32_t LRfreq = 433;
-const uint8_t  LRrange = 1;
+const uint32_t LRfreq = 434;
+const uint8_t  LRrange = 0;
 bool LoraOK = false;
 bool needPairing = false;
 bool pairingPending = false;
@@ -192,7 +192,7 @@ void onLoRaReceive(uint8_t len, rl_packet_t* p)
   noInterrupts();
   memcpy(&packetTable[idxWriteTable].packets.current, p, len);
   packetTable[idxWriteTable].version = 1;
-  packetTable[idxWriteTable].lqi = MLiotComm.lqi();
+  packetTable[idxWriteTable].lqi = MLradio.lqi();
   if (len == RL_PACKETV1_SIZE) packetTable[idxWriteTable].version = 1;
   idxWriteTable++;
   if (idxWriteTable >= MAX_PACKET)
@@ -390,7 +390,7 @@ void setup()
 #endif
 
   // start LoRa module
-  LoraOK = MLiotComm.begin(LRfreq * 1E6, onLoRaReceive, NULL, 14, LRrange);
+  LoraOK = MLradio.begin(LRfreq * 1E6, onLoRaReceive, 14, LRrange);
   if (LoraOK)
   {
     DEBUGln(F("LoRa OK"));

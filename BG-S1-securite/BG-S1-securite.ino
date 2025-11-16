@@ -17,19 +17,23 @@
 #include "config.h"
 
 #define ML_SX1278
-#include <MLiotComm.h>           // GitHub project : https://github.com/PM04290/MLiotComm
+#include <MLotaComm.h>           // GitHub project : https://github.com/PM04290/MLotaComm
 #include <MLiotElements.h>       // GitHub project : https://github.com/PM04290/MLiotElements
 
-#define MLiotCommHub MLiotComm   // native object rename for friendly using
-iotCommClass MLiotCommLocal;
+#define commHub MLradio   // native object rename for friendly using
+RadioLink commLocal(PIN_LORALAN_NSS, PIN_LORALAN_RST, PIN_LORALAN_DIO);
 
-uint16_t RadioFreq = 433;
-uint8_t RadioRange = 1;
-bool needPairing = false;
-uint32_t needSynchro = 0;
-bool loraLocalOK;
+uint16_t FreqHub = 433;
+uint8_t RangeHub = 1;
 bool loraHubOK;
 
+uint16_t FreqLocal = 434;
+uint8_t RangeLocal = 0;
+bool loraLocalOK;
+
+bool onBoot = true;
+bool needPairing = false;
+uint32_t needSynchro = 0;
 
 Analog* vbat;      // Battery voltage
 Binary* BinAlarm1; // binary input1, e.g PIR
@@ -65,7 +69,6 @@ typedef struct __attribute__((packed))
 {
   uint8_t version;
   uint8_t module;
-  int lqi;
   rl_packets packets;
 } packet_version;
 packet_version packetTable[MAX_PACKET];
@@ -110,7 +113,6 @@ void onLoRaHubReceive(uint8_t len, rl_packet_t* p)
   memcpy(&packetTable[idxWriteTable].packets.current, p, len);
   packetTable[idxWriteTable].version = 1;
   packetTable[idxWriteTable].module = 0;
-  packetTable[idxWriteTable].lqi = MLiotComm.lqi();
   if (len == RL_PACKETV1_SIZE) packetTable[idxWriteTable].version = 1;
   idxWriteTable++;
   if (idxWriteTable >= MAX_PACKET)
@@ -134,7 +136,6 @@ void onLoRaLocalReceive(uint8_t len, rl_packet_t* p)
   memcpy(&packetTable[idxWriteTable].packets.current, p, len);
   packetTable[idxWriteTable].version = 1;
   packetTable[idxWriteTable].module = 1;
-  packetTable[idxWriteTable].lqi = MLiotComm.lqi();
   if (len == RL_PACKETV1_SIZE) packetTable[idxWriteTable].version = 1;
   idxWriteTable++;
   if (idxWriteTable >= MAX_PACKET)
@@ -233,13 +234,12 @@ void processLoRa()
         }
         // route for all other devices
         if (loraLocalOK) {
-          MLiotCommLocal.publishPaquet((rl_packets*)pIn);
+          commLocal.publishPaquet((rl_packets*)pIn);
         }
       } else
       {
         if (loraLocalOK) {
-          pIn->destinationID = pIn->destinationID + 100;
-          MLiotCommLocal.publishPaquet((rl_packets*)pIn);
+          commLocal.publishPaquet((rl_packets*)pIn);
         }
       }
       return;
@@ -247,9 +247,9 @@ void processLoRa()
     // From routed Device to HUB
     if (p.module == 1)
     {
-      pIn->senderID = pIn->senderID - 100;
-      DEBUGf("route %d\n", pIn->senderID);
-      MLiotCommHub.publishPaquet(&p.packets);
+      DEBUGf("route %d => %d ", pIn->senderID, pIn->destinationID);
+      commHub.publishPaquet(&p.packets);
+      DEBUGln("ok");
       return;
     }
   }
@@ -263,6 +263,11 @@ void setup()
   //
   pinMode(PIN_OUT1, OUTPUT);
   digitalWrite(PIN_OUT1, LOW);
+
+  // put LoRa LAn Module in reset mode
+  pinMode(PIN_LORALAN_RST, OUTPUT);
+  digitalWrite(PIN_LORALAN_RST, LOW);
+
   //
   delay(3000);
   LED_WHITE(128);
@@ -278,8 +283,8 @@ void setup()
   }
 
   // active "pairing"
-  pinMode(PIN_WMODE, INPUT_PULLUP);
-  while (digitalRead(PIN_WMODE) == LOW)
+  pinMode(PIN_CFG, INPUT_PULLUP);
+  while (digitalRead(PIN_CFG) == LOW)
   {
     LED_BLUE(200); delay(millis() > 10000 ? 100 : 300);
     LED_OFF; delay(millis() > 10000 ? 100 : 300);
@@ -306,8 +311,8 @@ void setup()
     hubid = 0;
 
     EEPROM.put(EEP_UID, uid);
-    EEPROM.put(EEP_FREQ, RadioFreq);
-    EEPROM.put(EEP_RANGE, RadioRange);
+    EEPROM.put(EEP_FREQ, FreqHub);
+    EEPROM.put(EEP_RANGE, RangeHub);
     EEPROM.put(EEP_HUBID, hubid);
 
     inputRecord ir;
@@ -319,16 +324,16 @@ void setup()
     needPairing = true;
   }
 
-  EEPROM.get(EEP_FREQ, RadioFreq);
-  if (RadioFreq == 0xFFFF) RadioFreq = 433;
-  EEPROM.get(EEP_RANGE, RadioRange);
-  RadioRange = RadioRange % 4;
+  EEPROM.get(EEP_FREQ, FreqHub);
+  if (FreqHub == 0xFFFF) FreqHub = 433;
+  EEPROM.get(EEP_RANGE, RangeHub);
+  RangeHub = RangeHub % 4;
   EEPROM.get(EEP_HUBID, hubid);
   if (hubid > 9) hubid = 0;
 
   DEBUGf("UID:%d\n", uid);
-  DEBUGf("Freq:%d\n", RadioFreq);
-  DEBUGf("Range:%d\n", RadioRange);
+  DEBUGf("Freq:%d\n", FreqHub);
+  DEBUGf("Range:%d\n", RangeHub);
   DEBUGf("hubID:%d\n", hubid);
 
   analogReadResolution(12);        // 12 bits (0-4095)
@@ -353,10 +358,10 @@ void setup()
 
   RegOut1 = (Regul*)deviceManager.addElement(new Regul(CHILD_ID_REGUL_RELAY, EEP_REGUL_RELAY, Lumi, RelayOut1, LumMin, nullptr, ON_inner, F("Out mode")));
 
-  loraHubOK = MLiotCommHub.begin(RadioFreq * 1E6, onLoRaHubReceive, NULL, 20, RadioRange);
+  loraHubOK = commHub.begin(FreqHub * 1E6, onLoRaHubReceive, 20, RangeHub);
   if (loraHubOK)
   {
-    DEBUGf("LoRa Hub ok at %dMHz (range %d)\n", RadioFreq, RadioRange);
+    DEBUGf("LoRa Hub ok at %dMHz (range %d)\n", FreqHub, RangeHub);
     //
     if (needPairing)
     { // send pairing configuration and wait acknowledge
@@ -368,6 +373,7 @@ void setup()
         LED_BLUE(abs((tick % 511) - 255));
         processLoRa();
       }
+      LED_OFF;
     } else {
       LED_GREEN(255); delay(300); LED_OFF;
     }
@@ -375,24 +381,23 @@ void setup()
     DEBUGln("LoRa Hub ERROR");
     while (true)
     {
-      LED_RED(255); delay(300); LED_OFF; delay(200);
+      LED_RED(255); delay(100); LED_OFF; delay(400);
     }
   }
-  /*
-    MLiotCommLocal.setSS(9);
-    MLiotCommLocal.setDint(4);
-    MLiotCommLocal.setRst(6);
-    loraLocalOK = MLiotCommLocal.begin(RadioFreq * 1E6, onLoRaLocalReceive, NULL, 20, RadioRange);
-    if (loraLocalOK) {
-      DEBUGf("LoRa Local ok at %dMHz (range %d)\n", RadioFreq, RadioRange);
-    } else {
-      DEBUGln("LoRa Local ERROR");
-      for (int i = 0; i < 2; i++)
-      {
-        LED_RED(255); delay(200); LED_OFF; delay(200);
-      }
+
+  // LoRa 2
+  loraLocalOK = commLocal.begin(FreqLocal * 1E6, onLoRaLocalReceive, 15, RangeLocal);
+  if (loraLocalOK) {
+    DEBUGf("LoRa Local ok at %dMHz (range %d)\n", FreqLocal, RangeLocal);
+  } else {
+    DEBUGln("LoRa Local ERROR");
+    for (int i = 0; i < 2; i++)
+    {
+      LED_RED(255); delay(100); LED_OFF; delay(150);
+      LED_RED(255); delay(100); LED_OFF; delay(150);
     }
-  */
+  }
+
   // define time ISR
   secTimer = timerBegin(0, 80, true);
   timerAttachInterrupt(secTimer, &onTimer, true);
@@ -449,5 +454,9 @@ void loop()
   }
   if (doDay) {
     doDay = false;
+  }
+  if (onBoot) {
+    onBoot = false;
+    //commLocal.publishNum(RL_ID_BROADCAST, hubid, RL_ID_SYNCHRO, 10);
   }
 }
