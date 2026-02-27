@@ -83,7 +83,7 @@ function initWebSocket() {
 
 function WSonOpen(event) {
 	//console.log('Connection opened');
-	$("#datetime").css('color', 'black');
+	$("#datetime").css('color', 'var(--color)');
 }
 
 function WSonClose(event) {
@@ -174,6 +174,10 @@ function WSonMessage(event) {
 	});
 }
 
+function logpacket(elt) {
+	websocket.send("logpacket;"+(elt.checked?"1":"0"));
+}
+
 function pairingActive(elt) {
 	$("#floatinfo").fadeTo(100, elt.checked?1:0);
 	websocket.send("pairingactive;"+(elt.checked?"1":"0"));
@@ -225,14 +229,6 @@ function switchMonitor(elt, d, c) {
 
 function selectMonitor(elt, d, c) {
 	websocket.send("selectmon;"+d+";"+c+";"+$(elt).find('option:selected').text());
-}
-
-function displayPlot(event, d, c) {
-	toPlot.d = d;
-	toPlot.c = c;
-	toPlot.data = [];
-	websocket.send("plot;"+d+";"+c);
-	toggleModal(event);
 }
 
 function resizeCanvas() {

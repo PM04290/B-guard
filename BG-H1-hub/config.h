@@ -1,6 +1,6 @@
 #pragma once
 
-#define VERSION "1.0"
+#define VERSION "1.1"
 
 #define DEBUG_SERIAL
 #define DSerial Serial

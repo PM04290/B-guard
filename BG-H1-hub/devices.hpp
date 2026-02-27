@@ -339,28 +339,28 @@ class CEntity {
           case E_SWITCH:
             if (strcmp(payload, "ON") == 0)
             {
-              MLiotComm.publishSwitch(_devAdr, uid, getId(), 1);
+              LoRaComm.publishSwitch(_devAdr, uid, getId(), 1);
             }
             if (strcmp(payload, "OFF") == 0)
             {
-              MLiotComm.publishSwitch(_devAdr, uid, getId(), 0);
+              LoRaComm.publishSwitch(_devAdr, uid, getId(), 0);
             }
             break;
           case E_LIGHT:
             break;
           case E_COVER:
-            MLiotComm.publishText(_devAdr, uid, getId(), payload);
+            LoRaComm.publishText(_devAdr, uid, getId(), payload);
             break;
           case E_SELECT:
-            MLiotComm.publishText(_devAdr, uid, getId(), payload);
+            LoRaComm.publishText(_devAdr, uid, getId(), payload);
             break;
           case E_EVENT:
             break;
           case E_INPUTNUMBER:
-            MLiotComm.publishFloat(_devAdr, uid, getId(), String(payload).toFloat() * getNumberDiv(), getNumberDiv());
+            LoRaComm.publishFloat(_devAdr, uid, getId(), String(payload).toFloat() * getNumberDiv(), getNumberDiv());
             break;
           case E_BUTTON:
-            MLiotComm.publishText(_devAdr, uid, getId(), "!");
+            LoRaComm.publishText(_devAdr, uid, getId(), "!");
             break;
         }
       }
@@ -655,7 +655,7 @@ class CDevice {
       cnfp.childID = 0; // 0 for device param
       cnfp.pInt = newAdr;
       // Send new address to Device
-      MLiotComm.publishConfig(oldAdr, uid, (rl_configs_t*)&cnfp, C_PARAM);
+      LoRaComm.publishConfig(oldAdr, uid, (rl_configs_t*)&cnfp, C_PARAM);
       _JSconf["address"] = newAdr;
     }
     const char* getName()
@@ -782,7 +782,6 @@ class CHub {
     {
       _deviceFirst = nullptr;
       _oldMQTTconnected = false;
-      saveRecorderNeeded = false;
     }
     CDevice* newDevice(JsonVariant JSconf)
     {
@@ -875,7 +874,7 @@ class CHub {
         rl_configParam_t cnfp;
         memset(&cnfp, 0, sizeof(cnfp));
         DEBUGf("Send pairing done for %d\n", address);
-        MLiotComm.publishConfig(address, uid, (rl_configs_t*)&cnfp, C_END);
+        LoRaComm.publishConfig(address, uid, (rl_configs_t*)&cnfp, C_END);
         dev->setPairing(false);
         return true;
       }
@@ -909,7 +908,6 @@ class CHub {
             {
               ent->setState(ts, (float)cp->data.num.value / (float)cp->data.num.divider, cp->data.num.divider);
             }
-            storeToRecorder(ts, cp->senderID, cp->childID, (float)cp->data.num.value / (float)cp->data.num.divider);
             break;
           case E_TAG:
             ent->setState(ts, (int32_t)cp->data.tag.tagL);
@@ -1249,164 +1247,11 @@ class CHub {
         DEBUGln("** Error saving Config file");
       }
     }
-    void loadRecorder()
-    {
-      char fname[32];
-      String Jres;
-      CEntity* ent;
 
-      int y = rtc.year();
-      int m = rtc.month();
-      sprintf(fname, "/rec%d%02d.json", y, m);
-      DEBUGf("Load recorder %s\n", fname);
-      //
-      _recorderJson.clear();
-      JsonArray dataArray;
-      File file = SPIFFS.open(fname);
-      if (file)
-      {
-        DeserializationError error = deserializeJson(_recorderJson, file);
-        file.close();
-        if (error)
-        {
-          DEBUGf("failed to deserialize recorder file %s\n", fname);
-          dataArray = _recorderJson.to<JsonArray>();
-        } else {
-          dataArray = _recorderJson.as<JsonArray>();
-        }
-      } else {
-        // try mounth-1
-        m--;
-        if (m == 0) {
-          y--;
-          m = 12;
-        }
-        sprintf(fname, "/rec%d%02d.json", y, m);
-        File file = SPIFFS.open(fname);
-        if (file)
-        {
-          DeserializationError error = deserializeJson(_recorderJson, file);
-          file.close();
-          if (error)
-          {
-            DEBUGf("failed to deserialize recorder file %s\n", fname);
-            dataArray = _recorderJson.to<JsonArray>();
-          } else {
-            dataArray = _recorderJson.as<JsonArray>();
-          }
-        } else {
-          dataArray = _recorderJson.to<JsonArray>();
-        }
-      }
-    }
-
-    void cleanRecorder()
-    {
-      DateTime olddt = DateTime(rtc.year(), rtc.month(), rtc.day(), rtc.hour(), 0, 0);
-      uint32_t oldts = olddt.unixtime() - (2L * 86400L); // - 2 days
-      JsonArray dataArray = _recorderJson.as<JsonArray>();
-      long nbRemoved = 0;
-      for (long i = dataArray.size() - 1; i >= 0; i--)
-      {
-        if (dataArray[i]["ts"].as<unsigned long>() < oldts)
-        {
-          dataArray.remove(i);
-          nbRemoved++;
-        }
-      }
-      if (nbRemoved) {
-        DEBUGf("%d records deleted\n", nbRemoved);
-      }
-    }
-    void storeToRecorder(uint32_t ts, int d, int c, float f)
-    {
-      char key[8];
-      sprintf(key, "%02d_%02d", d, c);
-      //
-      saveRecorderNeeded = true;
-      //
-      JsonArray dataArray = _recorderJson.as<JsonArray>();
-      //DEBUGf("store %d : %s\n", ts, key);
-      JsonObject existingEntry;
-      for (JsonObject entry : dataArray)
-      {
-        if (entry["ts"] == ts)
-        {
-          existingEntry = entry;
-          break;
-        }
-      }
-      if (existingEntry) {
-        JsonObject sensors = existingEntry["dc"];
-        if (!sensors) {
-          sensors = existingEntry["dc"].to<JsonObject>();
-        }
-        sensors[key] = f;
-      } else {
-        JsonObject newEntry = dataArray.add<JsonObject>();
-        newEntry["ts"] = ts;
-        JsonObject sensors = newEntry["dc"].to<JsonObject>();
-        sensors[key] = f;
-      }
-    }
-    void saveRecorder()
-    {
-      char fname[32];
-      String Jres;
-      //
-      if (!saveRecorderNeeded)
-        return;
-      //
-      cleanRecorder();
-      //
-      sprintf(fname, "/rec%d%02d.json", rtc.year(), rtc.month());
-      size_t Lres = serializeJson(_recorderJson, Jres);
-      DEBUGln(Jres);
-
-      File file = SPIFFS.open(fname, "w");
-      if (file)
-      {
-        file.write((byte*)Jres.c_str(), Lres);
-        file.close();
-        DEBUGf("Recorder file is saved: %s\n", fname);
-      } else {
-        DEBUGln("** Error saving Recorder file");
-      }
-
-      saveRecorderNeeded = false;
-    }
-    String getPlotData(int d, int c)
-    {
-      char key[8];
-      sprintf(key, "%02d_%02d", d, c);
-      JsonDocument outJson;
-      JsonArray outArray = outJson.to<JsonArray>();
-      //
-      JsonArray dataArray = _recorderJson.as<JsonArray>();
-      for (long i = 0; i < dataArray.size(); i++)
-      {
-        uint32_t ts = dataArray[i]["ts"].as<unsigned long>();
-        JsonObject item = dataArray[i]["dc"].as<JsonObject>();
-        if (item[key].is<float>())
-        {
-          float f = item[key].as<float>();
-          JsonObject outData = outArray.add<JsonObject>();
-          outData["x"] = ts;
-          outData["y"] = f;
-        }
-      }
-      String js;
-      serializeJson(outJson, js);
-      DEBUGln(js);
-      outJson.clear();
-      return js;
-    }
   private:
     CDevice* _deviceFirst;
     JsonDocument _configJson;
-    JsonDocument _recorderJson;
     bool _oldMQTTconnected;
-    bool saveRecorderNeeded;
 };
 
 CHub Hub;

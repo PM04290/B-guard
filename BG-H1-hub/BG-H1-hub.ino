@@ -1,11 +1,16 @@
 /*
-  Designed for ESP32
+  Designed for ESP32 S3 Mini
   Radio module : SX1278 (Ra-02)
 
   Wifi AP
     - default ssid : bghub0
     - default password : 12345678
-    - default address : 192.164.4.1 (bgsecure0.local)
+    - default address : 192.164.4.1 (bghub0.local)
+
+  Changelog :
+    - 1.0 initial version
+    - 1.1 erase all Recorder functions
+          renamed LoRa library (MLotaComm)
 */
 #include <Arduino.h> // native
 #include <EEPROM.h>  // native
@@ -25,8 +30,8 @@
 #include "config.h"
 
 #define ML_SX1278
-#include <MLiotComm.h>           // GitHub project : https://github.com/PM04290/MLiotComm
-iotCommClass MLiotComm;
+#include <MLotaComm.h>           // GitHub project : https://github.com/PM04290/MLiotComm
+RadioLink LoRaComm;
 uint8_t uid;
 uint16_t RadioFreq = 433;
 uint8_t RadioRange = 1;
@@ -112,7 +117,7 @@ void onLoRaReceive(uint8_t len, rl_packet_t* p)
   noInterrupts();
   memcpy(&packetTable[idxWriteTable].packets.current, p, len);
   packetTable[idxWriteTable].version = 1;
-  packetTable[idxWriteTable].lqi = MLiotComm.lqi();
+  packetTable[idxWriteTable].lqi = LoRaComm.lqi();
   if (len == RL_PACKETV1_SIZE) packetTable[idxWriteTable].version = 1;
   idxWriteTable++;
   if (idxWriteTable >= MAX_PACKET)
@@ -279,7 +284,7 @@ void setup()
   DEBUGln(datetimeTZ);
   DEBUGln(datetimeNTP);
 
-  loraOK = MLiotComm.begin(RadioFreq * 1E6, onLoRaReceive, NULL, 20, RadioRange);
+  loraOK = LoRaComm.begin(RadioFreq * 1E6, onLoRaReceive, 20, RadioRange);
   if (loraOK)
   {
     DEBUGf("LoRa ok at %dMHz (range %d)\n", RadioFreq, RadioRange);
@@ -357,7 +362,6 @@ void loop()
   if (doMinute) {
     doMinute = false;
     notifyDateTime();
-    Hub.saveRecorder();
   }
   if (doHour) {
     doHour = false;
@@ -378,7 +382,6 @@ void loop()
     // At start, wait for NTP update
     if (rtc.year() > 2020) {
       onBoot = false;
-      Hub.loadRecorder();
       DEBUGf("heap_caps_get_largest_free_block: %d\n", heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
       //
       uint8_t minID = 199;
@@ -390,7 +393,7 @@ void loop()
           minID = dev->getAddress();
         }
       }
-      MLiotComm.publishNum(RL_ID_BROADCAST, uid, RL_ID_SYNCHRO, minID);
+      LoRaComm.publishNum(RL_ID_BROADCAST, uid, RL_ID_SYNCHRO, minID);
     }
   }
 }

@@ -940,7 +940,7 @@ void handleWsMessage(void *arg, uint8_t *data, size_t len)
     {
       CEntity* ent = Hub.getEntityById(p1.toInt(), p2.toInt());
       if (ent) {
-        MLiotComm.publishText(p1.toInt(), uid, ent->getId(), "!");
+        LoRaComm.publishText(p1.toInt(), uid, ent->getId(), "!");
       }
     }
     if (cmd == "inputmon")
@@ -948,31 +948,22 @@ void handleWsMessage(void *arg, uint8_t *data, size_t len)
       CEntity* ent = Hub.getEntityById(p1.toInt(), p2.toInt());
       if (ent) {
         float f = p3.toFloat() * ent->getNumberDiv();
-        MLiotComm.publishFloat(p1.toInt(), uid, ent->getId(), f, ent->getNumberDiv());
+        LoRaComm.publishFloat(p1.toInt(), uid, ent->getId(), f, ent->getNumberDiv());
       }
     }
     if (cmd == "switchmon")
     {
       CEntity* ent = Hub.getEntityById(p1.toInt(), p2.toInt());
       if (ent) {
-        MLiotComm.publishSwitch(p1.toInt(), uid, ent->getId(), p3.toInt());
+        LoRaComm.publishSwitch(p1.toInt(), uid, ent->getId(), p3.toInt());
       }
     }
     if (cmd == "selectmon")
     {
       CEntity* ent = Hub.getEntityById(p1.toInt(), p2.toInt());
       if (ent) {
-        MLiotComm.publishText(p1.toInt(), uid, ent->getId(), p3.c_str());
+        LoRaComm.publishText(p1.toInt(), uid, ent->getId(), p3.c_str());
       }
-    }
-    if (cmd == "plot")
-    {
-      docJson.clear();
-      docJson["cmd"] = "plotdata";
-      docJson["datas"] = Hub.getPlotData(p1.toInt(), p2.toInt());
-      String js;
-      serializeJson(docJson, js);
-      sendWS(js);
     }
   }
 }
