@@ -79,6 +79,7 @@ volatile byte idxWriteTable = 0;
 hw_timer_t* secTimer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 volatile bool topSecond = false;
+volatile bool topProcess = true; // True for process at boot
 uint8_t cntMinute = 0;
 uint8_t cntHour = 7;
 
@@ -89,6 +90,10 @@ void IRAM_ATTR onTimer()
   portENTER_CRITICAL_ISR(&timerMux);
   topSecond = true;
   portEXIT_CRITICAL_ISR(&timerMux);
+}
+
+void ARDUINO_ISR_ATTR onAlarm() {
+  topProcess = true;
 }
 
 bool getPacket(packet_version* p)
@@ -343,14 +348,16 @@ void setup()
   vbat->setParams(onAnalogVbat, 0, 0, 0);
 
   BinAlarm1 = (Binary*)deviceManager.addElement(new Binary(PIN_IN3, CHILD_ID_BINSENSOR_1, F("Alarm1"), stateInverted, nullptr));
+  attachInterrupt(PIN_IN3, onAlarm, CHANGE);
 
   BinAlarm2 = (Binary*)deviceManager.addElement(new Binary(PIN_IN2, CHILD_ID_BINSENSOR_2, F("Alarm2"), stateInverted, nullptr));
+  attachInterrupt(PIN_IN2, onAlarm, CHANGE);
 
   Temp = (Analog*)deviceManager.addElement(new Analog(PIN_IN1, CHILD_ID_SENSOR_TEMP, F("Temp"), F("°"), 3, 10));
   Temp->setParams(onAnalogNTC, 3950, 4700, 5000); // set Thermistor parameters (Beta, Resistor, Thermistor)
 
-  Lumi = (Analog*)deviceManager.addElement(new Analog(PIN_LDR, CHILD_ID_SENSOR_LUM, F("Lumi"), F("lux"), 5, 1));
-  Lumi->setParams(onAnalogLumi, 10000, 0, 0); // 10K resistor (vcc side)
+  Lumi = (Analog*)deviceManager.addElement(new Analog(PIN_LDR, CHILD_ID_SENSOR_LUM, F("Lumi"), F("lux"), 50, 1));
+  Lumi->setParams(onAnalogLumi, 4700, 0, 0); // 4.7K resistor (vcc side)
 
   RelayOut1 = (Relay*)deviceManager.addElement(new Relay(PIN_OUT1, CHILD_ID_RELAY, F("Relay")));
 
@@ -427,6 +434,9 @@ void loop()
       cntMinute++;
       doMinute = true;
     }
+    if (ntick % 30 == 0) {
+      topProcess = true;
+    }
     if (cntMinute >= 60) { // 1 Hour
       cntMinute = 0;
       cntHour++;
@@ -436,15 +446,22 @@ void loop()
       cntHour = 0;
       doDay = true;
     }
+    //
   }
   if (needSynchro && (millis() > needSynchro))
   {
     needSynchro = 0;
     forceSending = true;
   }
+  //
   processLoRa();
-  deviceManager.processElements();
-  deviceManager.sendElements(forceSending);
+  //
+  if (topProcess)
+  {
+    topProcess = false;
+    deviceManager.processElements();
+    deviceManager.sendElements(forceSending);
+  }
   //
   if (doMinute) {
     doMinute = false;
@@ -457,6 +474,6 @@ void loop()
   }
   if (onBoot) {
     onBoot = false;
-    //commLocal.publishNum(RL_ID_BROADCAST, hubid, RL_ID_SYNCHRO, 10);
+    //to do 1 time at boot
   }
 }

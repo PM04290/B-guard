@@ -1,17 +1,17 @@
 #pragma once
 
-#define VERSION "1.1"
+#define VERSION "1.2"
 
 #define DEBUG_SERIAL
 #define DSerial Serial
 
 #define DEBUG_LED
 
-#define PIN_MES_VBAT  33
+#define PIN_MES_VBAT  17 /* since v1.2 */
 #define PIN_IN1       16
 #define PIN_IN2       18
 #define PIN_IN3       34
-#define PIN_LDR       38
+#define PIN_LDR       17 /* since V1.2 */
 #define PIN_OUT1       7
 #define PIN_OUT2       8
 #define PIN_WMODE     44
